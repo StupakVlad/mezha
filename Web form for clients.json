@@ -1,0 +1,722 @@
+{
+  "name": "Web form for clients",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "3941ada5-e66a-496b-9b6c-df429c4260b2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "55b0dbc2-e1a3-4e0d-a0fb-19a3abb547e0",
+      "name": "Webhook",
+      "webhookId": "3941ada5-e66a-496b-9b6c-df429c4260b2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9dc141b9-2087-42b0-bcdc-b088f6914900",
+              "name": "name",
+              "value": "={{ $json.body.name }}",
+              "type": "string"
+            },
+            {
+              "id": "8006d8b3-5494-4364-8b5a-2b33f97e8f27",
+              "name": "phone",
+              "value": "={{ $json.body.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "eab93b0e-7776-431a-84aa-6a51bbeaa972",
+              "name": "email",
+              "value": "={{ $json.body.email }}",
+              "type": "string"
+            },
+            {
+              "id": "2c3a7cda-2d0d-486d-baad-fb8320b1e6c7",
+              "name": "company",
+              "value": "={{ $json.body.company }}",
+              "type": "string"
+            },
+            {
+              "id": "8d30a2f7-6292-46ca-807c-4a28fd9648f8",
+              "name": "budget",
+              "value": "={{ $json.body.budget }}",
+              "type": "string"
+            },
+            {
+              "id": "7fc24fbf-4992-4d36-a042-1d81dd3a601a",
+              "name": "project_type",
+              "value": "={{ $json.body.project_type }}",
+              "type": "string"
+            },
+            {
+              "id": "0a5f7599-2410-4758-afbe-da409aed2700",
+              "name": "timeline",
+              "value": "={{ $json.body.timeline }}",
+              "type": "string"
+            },
+            {
+              "id": "6d519f64-301b-498e-a1d6-bda6209a66e8",
+              "name": "message",
+              "value": "={{ $json.body.message }}",
+              "type": "string"
+            },
+            {
+              "id": "0ae949db-a6a1-4273-b75c-61871d65e4a6",
+              "name": "source",
+              "value": "={{ $json.body.source }}",
+              "type": "string"
+            },
+            {
+              "id": "43bdc742-7613-4995-923b-b8adeef673d0",
+              "name": "meta_info.submitted_at",
+              "value": "={{ $json.body.meta.submitted_at }}",
+              "type": "string"
+            },
+            {
+              "id": "54a9d3cb-9abd-44da-825f-91a002ee72f1",
+              "name": "meta_info.client_ip",
+              "value": "={{ $json.headers['cf-connecting-ip'] }}",
+              "type": "string"
+            },
+            {
+              "id": "1dec2ae5-848f-4af6-bb0e-a2aa6c62262e",
+              "name": "meta_info.country",
+              "value": "={{ $json.headers['cf-ipcountry'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "99d924ef-1c10-40c4-9c25-2ae8b1c25794",
+      "name": "JSON preparation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\n\nconst d = $input.first().json;\n\nconst trim  = (s) => (s ?? '').toString().trim();\nconst lower = (s) => trim(s).toLowerCase();\n\n// email\nconst email = lower(d.email);\nconst emailDomain = email.split('@')[1] || '';\nconst personalDomains = ['gmail.com','outlook.com'];\n\n// phone\nlet phone = trim(d.phone).replace(/[^\\d+]/g, '');\nif (phone.startsWith('+')) { /* already */ }\nelse if (phone.startsWith('380')) phone = '+' + phone;\nelse if (phone.startsWith('0'))   phone = '+38' + phone;\nelse if (phone.length === 9)      phone = '+380' + phone;\n\n// budget\nconst budgetMap = {\n  '<2k':    { min: 0,     max: 2000  },\n  '2k-5k':  { min: 2000,  max: 5000  },\n  '5k-10k': { min: 5000,  max: 10000 },\n  '10k+':   { min: 10000, max: null  },\n  'discuss':{ min: null,  max: null  }\n};\nconst budget = budgetMap[d.budget] || { min: null, max: null };\n\n// source\nconst sourceCategoryMap = {\n  google:'search', tiktok:'social', linkedin:'social',};\nconst source = lower(d.source);\nconst sourceCategory = sourceCategoryMap[source] || (source ? 'other' : 'unknown');\n\n//timezone\nconst submittedUtc = d.meta_info?.submitted_at || new Date().toISOString();\nconst submittedLocal = new Date(submittedUtc).toLocaleString('uk-UA', {\n  timeZone: 'Europe/Kyiv',\n  year: 'numeric', month: '2-digit', day: '2-digit',\n  hour: '2-digit', minute: '2-digit'\n});\n\n//geo\nconst phoneCountry = phone.startsWith('+380') ? 'UA'\n                   : phone.startsWith('+48')  ? 'PL'\n                   : null;\nconst ipCountry = d.meta_info?.country || null;\n\nreturn [{\n  json: {\n    // contact\n    name: trim(d.name),\n    company: trim(d.company),\n    email,\n    email_domain: emailDomain,\n    is_business_email: !!emailDomain && !personalDomains.includes(emailDomain),\n    phone,\n    phone_country: phoneCountry,\n\n    // project signals\n    project_type: trim(d.project_type),\n    budget_raw: d.budget || '',\n    budget_min: budget.min,\n    budget_max: budget.max,\n    budget_known: !!d.budget && d.budget !== 'discuss',\n    timeline: d.timeline || '',\n    is_urgent: ['asap','1m'].includes(d.timeline),\n\n    // attribution\n    source,\n    source_category: sourceCategory,\n\n    // message\n    message: d.message ?? '',\n\n    // meta\n    ip: d.meta_info?.client_ip || '',\n    ip_country: ipCountry,\n    country_consistent: phoneCountry && ipCountry ? phoneCountry === ipCountry : null,\n    submitted_at_utc: submittedUtc,\n    submitted_at_local: submittedLocal,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "211680f4-39ea-4f46-a0d5-8274ff3d6ebd",
+      "name": "Data normalization"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=You are a lead classifier for a digital agency. Return ONLY a valid JSON object — no markdown, no comments.\n\nSchema:\n{\n  \"summary\": string (1-2 sentences in Ukrainian),\n  \"temperature\": \"hot\" | \"warm\" | \"cold\",\n  \"quality\": \"high\" | \"medium\" | \"low\",\n  \"category\": \"website\" | \"web_app\" | \"integration\" | \"ai\" | \"design\" | \"other\",\n  \"priority\": \"p0\" | \"p1\" | \"p2\" | \"p3\",\n  \"is_spam\": boolean,\n  \"fit_score\": 0-100,\n  \"red_flags\": string[],\n  \"highlights\": string[],\n  \"next_action\": \"call\" | \"email_clarification\" | \"send_proposal\" | \"schedule_meeting\" | \"ignore\"\n}\n\nRules:\n- timeline=\"asap\" → temperature is \"hot\" or \"warm\", never \"cold\".\n- budget=\"discuss\" means wants to discuss, NOT no money. Do not penalize.\n- Re-classify category from message if it conflicts with project_type (e.g. project_type=\"web_app\" but message about Instagram AI bot → category=\"ai\").\n\nLead data:\n{{ JSON.stringify($('Data normalization').item.json) }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        640,
+        0
+      ],
+      "id": "a1adb409-a625-4150-ab27-26c8383f1fd0",
+      "name": "Lead classification",
+      "credentials": {
+        "openAiApi": {
+          "id": "peNQuJBjhcxIJRur",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7f03058e-404f-4540-8788-5fed8617f7df",
+              "name": "",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "a2d0f6a4-4cd8-47cb-b846-c50b8a66103d",
+              "name": "name",
+              "value": "={{ $('Data normalization').item.json.name }}",
+              "type": "string"
+            },
+            {
+              "id": "cbe860fa-1163-46d4-aae2-533b37acd562",
+              "name": "company",
+              "value": "={{ $('Data normalization').item.json.company }}",
+              "type": "string"
+            },
+            {
+              "id": "11b06433-cc85-4bb2-8224-9618035ed04a",
+              "name": "email",
+              "value": "={{ $('Data normalization').item.json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "91d282dc-d5b7-4d94-8ea5-3c962ddd8136",
+              "name": "phone",
+              "value": "={{ $('Data normalization').item.json.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "20e43240-ab2f-4b23-b09d-b447cbd235d3",
+              "name": "country",
+              "value": "={{ $('Data normalization').item.json.ip_country }}",
+              "type": "string"
+            },
+            {
+              "id": "266a4cc2-79db-4e3b-88b4-f3c4574ac235",
+              "name": "project_type",
+              "value": "={{ $('Data normalization').item.json.project_type }}",
+              "type": "string"
+            },
+            {
+              "id": "a7daf61c-ac6e-4ead-be8c-ae2625a18ef2",
+              "name": "budget",
+              "value": "={{ $('Data normalization').item.json.budget_raw }}",
+              "type": "string"
+            },
+            {
+              "id": "85052efd-32c9-46c5-a538-f09df2894b4b",
+              "name": "timeline",
+              "value": "={{ $('Data normalization').item.json.timeline }}",
+              "type": "string"
+            },
+            {
+              "id": "51523a45-3200-44ff-a8f2-fa47e2f12ad8",
+              "name": "source",
+              "value": "={{ $('Data normalization').item.json.source }}",
+              "type": "string"
+            },
+            {
+              "id": "b4b58eca-1bc0-4a46-a3a6-dfef4dc5a2c1",
+              "name": "message",
+              "value": "={{ $('Data normalization').item.json.message }}",
+              "type": "string"
+            },
+            {
+              "id": "1d6b3dd5-49a7-443a-94ad-ece013dfb19b",
+              "name": "submitted_at",
+              "value": "={{ $('Data normalization').item.json.submitted_at_local }}",
+              "type": "string"
+            },
+            {
+              "id": "a08c9f68-fafa-47ed-b869-ac02ebcf7689",
+              "name": "summary",
+              "value": "={{ $('Lead classification').item.json.output[0].content[0].text.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "b5004106-11dc-42e8-9ff2-0e051e5f112f",
+              "name": "temperature",
+              "value": "={{ $json.output[0].content[0].text.temperature }}",
+              "type": "string"
+            },
+            {
+              "id": "52764a3d-a218-4153-bccc-fbebcbd48187",
+              "name": "priority",
+              "value": "={{ $json.output[0].content[0].text.priority }}",
+              "type": "string"
+            },
+            {
+              "id": "9c041d00-b625-43d2-a8f4-58f40232cc35",
+              "name": "category",
+              "value": "={{ $json.output[0].content[0].text.category }}",
+              "type": "string"
+            },
+            {
+              "id": "c34c98ae-8c20-4433-9fbf-43a901769f4b",
+              "name": "quality",
+              "value": "={{ $json.output[0].content[0].text.quality }}",
+              "type": "string"
+            },
+            {
+              "id": "40e63375-7598-4e7b-b343-a9d2e791970b",
+              "name": "fit_score",
+              "value": "={{ $json.output[0].content[0].text.fit_score }}",
+              "type": "number"
+            },
+            {
+              "id": "a86de640-1dbc-4a65-8052-186ab783f7a9",
+              "name": "is_spam",
+              "value": "={{ $json.output[0].content[0].text.is_spam }}",
+              "type": "boolean"
+            },
+            {
+              "id": "82f0c911-8b56-4060-aebe-a64bc572807f",
+              "name": "next_action",
+              "value": "={{ $json.output[0].content[0].text.next_action }}",
+              "type": "string"
+            },
+            {
+              "id": "c251ef71-7315-4069-beb0-eb57ce76b30a",
+              "name": "highlights",
+              "value": "={{ $json.output[0].content[0].text.highlights }}",
+              "type": "array"
+            },
+            {
+              "id": "5f85d3d7-6c7d-4717-814a-318d10887e73",
+              "name": "red_flags",
+              "value": "={{ $json.output[0].content[0].text.red_flags }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        992,
+        0
+      ],
+      "id": "da45f7e9-de1c-46e9-bf81-a58bb22d38fb",
+      "name": "Final data"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1IgE1k2y8wwmRhiN7S553CFvXNVlIKh11tsyRSOXTof4/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1IgE1k2y8wwmRhiN7S553CFvXNVlIKh11tsyRSOXTof4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Ім'я": "={{ $json.name }}",
+            "Телефон": "={{ $json.phone }}",
+            "Дата заявки": "={{ $json.submitted_at }}",
+            "Компанія": "={{ $json.company }}",
+            "Email": "={{ $json.email }}",
+            "Країна": "={{ $json.country }}",
+            "Тип проєкту": "={{ $json.project_type }}",
+            "Бюджет": "={{ $json.budget_raw }}",
+            "Термін": "={{ $json.timeline }}",
+            "Джерело": "={{ $json.source }}",
+            "Повідомлення": "={{ $json.message }}",
+            "Резюме": "={{ $json.summary }}",
+            "Температура": "={{ $json.temperature }}",
+            "Пріоритет": "={{ $json.priority }}",
+            "Категорія": "={{ $json.category }}",
+            "Якість": "={{ $json.quality }}",
+            "Оцінка": "={{ $json.fit_score }}",
+            "Спам": "={{ $json.is_spam }}",
+            "Наступний крок": "={{ $json.next_action }}",
+            "Плюси": "={{ $json.highlights }}",
+            "Ризики": "={{ $json.red_flags }}"
+          },
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "Ім'я",
+              "displayName": "Ім'я",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Телефон",
+              "displayName": "Телефон",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Дата заявки",
+              "displayName": "Дата заявки",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Компанія",
+              "displayName": "Компанія",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Країна",
+              "displayName": "Країна",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Тип проєкту",
+              "displayName": "Тип проєкту",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Бюджет",
+              "displayName": "Бюджет",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Термін",
+              "displayName": "Термін",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Джерело",
+              "displayName": "Джерело",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Повідомлення",
+              "displayName": "Повідомлення",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Резюме",
+              "displayName": "Резюме",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Температура",
+              "displayName": "Температура",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Пріоритет",
+              "displayName": "Пріоритет",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Категорія",
+              "displayName": "Категорія",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Якість",
+              "displayName": "Якість",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Оцінка",
+              "displayName": "Оцінка",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Спам",
+              "displayName": "Спам",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Наступний крок",
+              "displayName": "Наступний крок",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Плюси",
+              "displayName": "Плюси",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Ризики",
+              "displayName": "Ризики",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1424,
+        -96
+      ],
+      "id": "596b2360-50f2-4cf0-8fd1-2151fe26c2cd",
+      "name": "Leads",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "jClFzP1hQquoyowr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nconst DICT = {\n  project_type: {\n    website: 'Сайт / Лендинг',\n    web_app: 'Веб-додаток',\n    integration: 'Інтеграція',\n    ai: 'AI-рішення',\n    design: 'Дизайн',\n    other: 'Інше'\n  },\n  category: {\n    website: 'Сайт / Лендинг',\n    web_app: 'Веб-додаток',\n    integration: 'Інтеграція',\n    ai: 'AI-рішення',\n    design: 'Дизайн',\n    other: 'Інше'\n  },\n  budget: {\n    '<2k': 'До 2 000$',\n    '2k-5k': '2-5 тис. $',\n    '5k-10k': '5-10 тис. $',\n    '10k+': '10 тис. $+',\n    discuss: 'Обговорюється'\n  },\n  timeline: {\n    asap: 'Терміново',\n    '1m': 'До 1 місяця',\n    '2-3m': '2-3 місяці',\n    flexible: 'Гнучко'\n  },\n  temperature: {\n    hot: '🔥 Гарячий',\n    warm: '🌤 Теплий',\n    cold: '❄️ Холодний'\n  },\n  quality: {\n    high: 'Висока',\n    medium: 'Середня',\n    low: 'Низька'\n  },\n  next_action: {\n    call: 'Подзвонити',\n    email_clarification: 'Уточнити поштою',\n    send_proposal: 'Надіслати пропозицію',\n    schedule_meeting: 'Призначити зустріч',\n    ignore: 'Ігнорувати'\n  },\n    priority: {\n    p0: '⏱ Зараз',\n    p1: '📅 Сьогодні',\n    p2: '🗓 24 години',\n    p3: '📥 Коли буде час'\n  }\n};\n\nconst data = $input.first().json;\nconst tr = (field, value) => DICT[field]?.[value] ?? value;\n\nreturn [{\n  json: {\n    ...data,\n    project_type: tr('project_type', data.project_type),\n    category:    tr('category', data.category),\n    budget:      tr('budget', data.budget),\n    timeline:    tr('timeline', data.timeline),\n    temperature: tr('temperature', data.temperature),\n    quality:     tr('quality', data.quality),\n    next_action: tr('next_action', data.next_action),\n    is_spam:     data.is_spam ? 'Так' : 'Ні',\n    priority: tr('priority', data.priority),\n    highlights: (data.highlights || []).join('\\n'),\nred_flags:  (data.red_flags  || []).join('\\n')\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "id": "6f60c6a6-4e91-4407-ba0e-d0b7bd4fa721",
+      "name": "Localize"
+    },
+    {
+      "parameters": {
+        "chatId": "-1003931738053",
+        "text": "={{ `*${$json.priority}* · ${$json.temperature}\n\n*${$json.name}*${$json.company ? ' · ' + $json.company : ''}\n📧 ${$json.email}\n📞 ${$json.phone || '—'}\n🌍 ${$json.country}\n\n_${$json.summary}_\n\n🎯 ${$json.category} · ${$json.timeline}\n💰 ${$json.budget}\n📊 ${$json.quality} · ${$json.fit_score}/100\n\n!!! *${$json.next_action}*\n\n✨ *Плюси:*\n${$json.highlights}${$json.red_flags ? '\\n\\n⚠️ *Ризики:*\\n' + $json.red_flags : ''}` }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1424,
+        112
+      ],
+      "id": "80954627-3e14-4752-ae13-4a7245189bfe",
+      "name": "Send a text message",
+      "webhookId": "3497d1cc-130c-417f-b975-14dceb07d887",
+      "credentials": {
+        "telegramApi": {
+          "id": "NuGIltvRx3yCADe2",
+          "name": "Telegram account TZ"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "JSON preparation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON preparation": {
+      "main": [
+        [
+          {
+            "node": "Data normalization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data normalization": {
+      "main": [
+        [
+          {
+            "node": "Lead classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead classification": {
+      "main": [
+        [
+          {
+            "node": "Final data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final data": {
+      "main": [
+        [
+          {
+            "node": "Localize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Localize": {
+      "main": [
+        [
+          {
+            "node": "Leads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leads": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "d8730995-baf0-4440-a5b1-52bd76ac9224",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e24cd0cf5a3978e06118ce6c9c51cd964ed39e117ab060967931a005471df35a"
+  },
+  "id": "iuEoUThHfiyqu24r",
+  "tags": [
+    {
+      "updatedAt": "2026-06-05T18:54:42.137Z",
+      "createdAt": "2026-06-05T18:54:42.137Z",
+      "id": "xu7vc3m8xOqXj7cW",
+      "name": "website mezha"
+    }
+  ]
+}
